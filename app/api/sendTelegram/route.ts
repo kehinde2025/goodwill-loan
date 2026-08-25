@@ -5,28 +5,31 @@ export const maxDuration = 60;
 
 const TELEGRAM_API = "https://api.telegram.org";
 
-type TelegramConfig = {
-  botToken: string;
-  chatId: string;
-};
-
 export async function POST(req: NextRequest) {
   try {
     const data = await req.formData();
 
-    const telegrams: TelegramConfig[] = [
-      {
-        botToken: process.env.TELEGRAM_BOT_TOKEN ?? "",
-        chatId: process.env.TELEGRAM_CHAT_ID ?? "",
-      },
-      {
-        botToken: process.env.TELEGRAM_BOT_TOKEN_2 ?? "",
-        chatId: process.env.TELEGRAM_CHAT_ID_2 ?? "",
-      },
-    ].filter(
-      (telegram): telegram is TelegramConfig =>
-        Boolean(telegram.botToken && telegram.chatId)
-    );
+    const botToken1 = process.env.TELEGRAM_BOT_TOKEN;
+    const chatId1 = process.env.TELEGRAM_CHAT_ID;
+
+    const botToken2 = process.env.TELEGRAM_BOT_TOKEN_2;
+    const chatId2 = process.env.TELEGRAM_CHAT_ID_2;
+
+    const telegrams: { botToken: string; chatId: string }[] = [];
+
+    if (botToken1 && chatId1) {
+      telegrams.push({
+        botToken: botToken1,
+        chatId: chatId1,
+      });
+    }
+
+    if (botToken2 && chatId2) {
+      telegrams.push({
+        botToken: botToken2,
+        chatId: chatId2,
+      });
+    }
 
     if (telegrams.length === 0) {
       throw new Error(
@@ -52,16 +55,16 @@ export async function POST(req: NextRequest) {
     if (textEntries.length > 0) {
       const text = textEntries.join("\n");
 
-      for (const { botToken, chatId } of telegrams) {
+      for (const telegram of telegrams) {
         const msgRes = await fetch(
-          `${TELEGRAM_API}/bot${botToken}/sendMessage`,
+          `${TELEGRAM_API}/bot${telegram.botToken}/sendMessage`,
           {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              chat_id: chatId,
+              chat_id: telegram.chatId,
               text,
             }),
           }
@@ -79,10 +82,13 @@ export async function POST(req: NextRequest) {
 
     // Send uploaded files to both Telegram bots
     for (const { key, file } of files) {
-      for (const { botToken, chatId } of telegrams) {
+      for (const telegram of telegrams) {
         const fileFormData = new FormData();
 
-        fileFormData.append("chat_id", chatId);
+        fileFormData.append(
+          "chat_id",
+          telegram.chatId
+        );
 
         fileFormData.append(
           "document",
@@ -91,7 +97,7 @@ export async function POST(req: NextRequest) {
         );
 
         const fileRes = await fetch(
-          `${TELEGRAM_API}/bot${botToken}/sendDocument`,
+          `${TELEGRAM_API}/bot${telegram.botToken}/sendDocument`,
           {
             method: "POST",
             body: fileFormData,
@@ -112,7 +118,6 @@ export async function POST(req: NextRequest) {
       ok: true,
       message: "All data sent to both Telegram accounts",
     });
-
   } catch (err) {
     console.error(err);
 
