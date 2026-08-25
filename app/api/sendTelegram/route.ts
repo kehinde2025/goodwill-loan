@@ -9,11 +9,23 @@ export async function POST(req: NextRequest) {
   try {
     const data = await req.formData();
 
-    const botToken = process.env.TELEGRAM_BOT_TOKEN;
-    const chatId = process.env.TELEGRAM_CHAT_ID;
+    const telegrams = [
+      {
+        botToken: process.env.TELEGRAM_BOT_TOKEN,
+        chatId: process.env.TELEGRAM_CHAT_ID,
+      },
+      {
+        botToken: process.env.TELEGRAM_BOT_TOKEN_2,
+        chatId: process.env.TELEGRAM_CHAT_ID_2,
+      },
+    ].filter(
+      (telegram) => telegram.botToken && telegram.chatId
+    );
 
-    if (!botToken || !chatId) {
-      throw new Error("Bot token or chat ID not set in environment variables");
+    if (telegrams.length === 0) {
+      throw new Error(
+        "No Telegram bot token or chat ID configured"
+      );
     }
 
     const textEntries: string[] = [];
@@ -27,38 +39,76 @@ export async function POST(req: NextRequest) {
       }
     });
 
+    // Send text to both Telegram bots
     if (textEntries.length > 0) {
       const text = textEntries.join("\n");
-      const msgRes = await fetch(`${TELEGRAM_API}/bot${botToken}/sendMessage`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chat_id: chatId, text }),
-      });
-      if (!msgRes.ok) {
-        const err = await msgRes.text();
-        throw new Error(`SendMessage failed: ${err}`);
+
+      for (const { botToken, chatId } of telegrams) {
+        const msgRes = await fetch(
+          `${TELEGRAM_API}/bot${botToken}/sendMessage`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              chat_id: chatId,
+              text,
+            }),
+          }
+        );
+
+        if (!msgRes.ok) {
+          const err = await msgRes.text();
+          throw new Error(`SendMessage failed: ${err}`);
+        }
       }
     }
 
+    // Send uploaded files to both Telegram bots
     for (const { key, file } of files) {
-      // Compress: send as photo if small enough, else document
-      const fileFormData = new FormData();
-      fileFormData.append("chat_id", chatId);
-      fileFormData.append("document", file, `${key}.jpg`);
+      for (const { botToken, chatId } of telegrams) {
+        const fileFormData = new FormData();
 
-      const fileRes = await fetch(`${TELEGRAM_API}/bot${botToken}/sendDocument`, {
-        method: "POST",
-        body: fileFormData,
-      });
-      if (!fileRes.ok) {
-        const err = await fileRes.text();
-        throw new Error(`SendDocument failed for ${key}: ${err}`);
+        fileFormData.append("chat_id", chatId);
+        fileFormData.append(
+          "document",
+          file,
+          `${key}.jpg`
+        );
+
+        const fileRes = await fetch(
+          `${TELEGRAM_API}/bot${botToken}/sendDocument`,
+          {
+            method: "POST",
+            body: fileFormData,
+          }
+        );
+
+        if (!fileRes.ok) {
+          const err = await fileRes.text();
+
+          throw new Error(
+            `SendDocument failed for ${key}: ${err}`
+          );
+        }
       }
     }
 
-    return NextResponse.json({ ok: true, message: "All data sent to Telegram" });
+    return NextResponse.json({
+      ok: true,
+      message: "All data sent to both Telegram accounts",
+    });
+
   } catch (err) {
     console.error(err);
-    return NextResponse.json({ ok: false, error: (err as Error).message }, { status: 500 });
+
+    return NextResponse.json(
+      {
+        ok: false,
+        error: (err as Error).message,
+      },
+      { status: 500 }
+    );
   }
 }
