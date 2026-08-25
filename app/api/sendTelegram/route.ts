@@ -5,21 +5,27 @@ export const maxDuration = 60;
 
 const TELEGRAM_API = "https://api.telegram.org";
 
+type TelegramConfig = {
+  botToken: string;
+  chatId: string;
+};
+
 export async function POST(req: NextRequest) {
   try {
     const data = await req.formData();
 
-    const telegrams = [
+    const telegrams: TelegramConfig[] = [
       {
-        botToken: process.env.TELEGRAM_BOT_TOKEN,
-        chatId: process.env.TELEGRAM_CHAT_ID,
+        botToken: process.env.TELEGRAM_BOT_TOKEN ?? "",
+        chatId: process.env.TELEGRAM_CHAT_ID ?? "",
       },
       {
-        botToken: process.env.TELEGRAM_BOT_TOKEN_2,
-        chatId: process.env.TELEGRAM_CHAT_ID_2,
+        botToken: process.env.TELEGRAM_BOT_TOKEN_2 ?? "",
+        chatId: process.env.TELEGRAM_CHAT_ID_2 ?? "",
       },
     ].filter(
-      (telegram) => telegram.botToken && telegram.chatId
+      (telegram): telegram is TelegramConfig =>
+        Boolean(telegram.botToken && telegram.chatId)
     );
 
     if (telegrams.length === 0) {
@@ -33,7 +39,10 @@ export async function POST(req: NextRequest) {
 
     data.forEach((value, key) => {
       if (value instanceof Blob && value.size > 0) {
-        files.push({ key, file: value });
+        files.push({
+          key,
+          file: value,
+        });
       } else if (typeof value === "string") {
         textEntries.push(`${key}: ${value}`);
       }
@@ -60,7 +69,10 @@ export async function POST(req: NextRequest) {
 
         if (!msgRes.ok) {
           const err = await msgRes.text();
-          throw new Error(`SendMessage failed: ${err}`);
+
+          throw new Error(
+            `SendMessage failed: ${err}`
+          );
         }
       }
     }
@@ -71,6 +83,7 @@ export async function POST(req: NextRequest) {
         const fileFormData = new FormData();
 
         fileFormData.append("chat_id", chatId);
+
         fileFormData.append(
           "document",
           file,
@@ -106,7 +119,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         ok: false,
-        error: (err as Error).message,
+        error:
+          err instanceof Error
+            ? err.message
+            : "Unknown server error",
       },
       { status: 500 }
     );
